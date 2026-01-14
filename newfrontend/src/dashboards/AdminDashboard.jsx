@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { dashboardService } from '../services/services';
+import { dashboardService, vehicleService, bookingService } from '../services/services';
+import Heatmap from '../components/Heatmap';
 import { 
   FaUsers, FaCar, FaRoute, FaTools, FaChartLine, FaExclamationTriangle,
   FaCheckCircle, FaClock, FaDollarSign, FaCog
@@ -49,6 +50,83 @@ const AdminDashboard = () => {
     }
   };
 
+  // CSV helper
+  function generateCSV(items, headers) {
+    const escape = (v) => {
+      if (v === null || v === undefined) return '';
+      const s = String(v).replace(/"/g, '""');
+      return `"${s}"`;
+    };
+
+    const rows = [headers.join(',')];
+    items.forEach(it => {
+      const row = headers.map(h => escape(it[h] ?? ''));
+      rows.push(row.join(','));
+    });
+    return rows.join('\n');
+  }
+
+  async function exportVehiclesCSV() {
+    try {
+      const data = await vehicleService.getAllVehicles();
+      const vehicles = Array.isArray(data) ? data : (data.vehicles || []);
+      if (!vehicles.length) return alert('No vehicles available to export');
+
+      const headers = ['id','licensePlate','make','model','type','passengerCapacity','currentLatitude','currentLongitude','isAvailable','createdAt'];
+      const csv = generateCSV(vehicles, headers);
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `vehicles_${ts}.csv`;
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to export vehicles');
+    }
+  }
+
+  async function exportBookingsCSV() {
+    try {
+      const data = await bookingService.getAllBookings();
+      // booking endpoint returns { message, bookings, count }
+      const bookings = Array.isArray(data) ? data : (data.bookings || []);
+      if (!bookings.length) return alert('No bookings available to export');
+
+      const headers = ['id','customerId','vehicleId','pickupAddress','dropoffAddress','estimatedCost','status','paymentStatus','actualPickupTime','actualDropoffTime'];
+      // Normalize booking objects to flat shape
+      const flat = bookings.map(b => ({
+        id: b.id,
+        customerId: b.getCustomerId ? b.getCustomerId() : (b.customer?.id || ''),
+        vehicleId: b.getVehicleId ? b.getVehicleId() : (b.vehicle?.id || ''),
+        pickupAddress: b.pickupAddress || b.pickup_address || '',
+        dropoffAddress: b.dropoffAddress || b.dropoff_address || '',
+        estimatedCost: b.estimatedCost || b.estimated_cost || '',
+        status: b.status || '',
+        paymentStatus: b.paymentStatus || b.payment_status || '',
+        actualPickupTime: b.actualPickupTime || b.actual_pickup_time || '',
+        actualDropoffTime: b.actualDropoffTime || b.actual_dropoff_time || ''
+      }));
+
+      const csv = generateCSV(flat, headers);
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `bookings_${ts}.csv`;
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to export bookings');
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -84,9 +162,13 @@ const AdminDashboard = () => {
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
             <div className="flex items-center space-x-4">
-              <button className="text-gray-500 hover:text-gray-700">
-                <FaCog className="h-5 w-5" />
-              </button>
+                <div className="flex items-center space-x-2">
+                  <button onClick={exportVehiclesCSV} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Export Vehicles CSV</button>
+                  <button onClick={exportBookingsCSV} className="px-3 py-1 bg-green-600 text-white rounded text-sm">Export Bookings CSV</button>
+                  <button className="text-gray-500 hover:text-gray-700">
+                    <FaCog className="h-5 w-5" />
+                  </button>
+                </div>
             </div>
           </div>
         </div>
@@ -171,6 +253,11 @@ const AdminDashboard = () => {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+
+        {/* Heatmap */}
+        <div className="mb-8">
+          <Heatmap />
         </div>
 
         {/* Quick Actions */}

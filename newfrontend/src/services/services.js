@@ -144,8 +144,18 @@ export const vehicleService = {
   getAllVehicles: async () => {
     try {
       const response = await apiClient.get('/vehicles');
-      return response;
+      // prefer response.data when using axios-like client
+      const data = response.data ?? response;
+      try { localStorage.setItem('neurofleetx_vehicles', JSON.stringify(data)); } catch (e) { /* ignore */ }
+      return data;
     } catch (error) {
+      // Fallback to localStorage cached vehicles when backend unavailable
+      try {
+        const raw = localStorage.getItem('neurofleetx_vehicles');
+        if (raw) return JSON.parse(raw);
+      } catch (e) {
+        /* ignore parse errors */
+      }
       throw error.response?.data || { message: 'Failed to fetch vehicles' };
     }
   },
@@ -260,6 +270,25 @@ export const bookingService = {
       return response;
     } catch (error) {
       throw error.response?.data || { message: 'Failed to cancel booking' };
+    }
+  },
+
+  // Get all bookings (admin)
+  getAllBookings: async () => {
+    try {
+      const response = await apiClient.get('/bookings');
+      const data = response.data ?? response;
+      try { localStorage.setItem('neurofleetx_bookings', JSON.stringify(data)); } catch (e) { /* ignore */ }
+      return data;
+    } catch (error) {
+      // Fallback to cached bookings in localStorage
+      try {
+        const raw = localStorage.getItem('neurofleetx_bookings');
+        if (raw) return JSON.parse(raw);
+      } catch (e) {
+        /* ignore */
+      }
+      throw error.response?.data || { message: 'Failed to fetch bookings' };
     }
   },
 };

@@ -170,15 +170,31 @@ public class BookingController {
         try {
             List<Booking> allBookings = bookingService.getAllBookings();
             System.out.println("FOUND " + allBookings.size() + " TOTAL BOOKINGS");
-            
-            // Prepare response
+
+            // Convert to simplified DTOs to avoid lazy-loading / serialization problems
+            List<Map<String, Object>> simple = allBookings.stream().map(b -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id", b.getId());
+                m.put("customerId", b.getCustomer() != null ? b.getCustomer().getId() : null);
+                m.put("vehicleId", b.getVehicle() != null ? b.getVehicle().getId() : null);
+                m.put("pickupAddress", b.getPickupAddress());
+                m.put("dropoffAddress", b.getDropoffAddress());
+                m.put("estimatedCost", b.getEstimatedCost());
+                m.put("status", b.getStatus());
+                m.put("paymentStatus", b.getPaymentStatus());
+                m.put("actualPickupTime", b.getActualPickupTime() != null ? b.getActualPickupTime().toString() : null);
+                m.put("actualDropoffTime", b.getActualDropoffTime() != null ? b.getActualDropoffTime().toString() : null);
+                m.put("createdAt", b.getCreatedAt() != null ? b.getCreatedAt().toString() : null);
+                return m;
+            }).toList();
+
             Map<String, Object> response = new HashMap<>();
             response.put("message", "All bookings retrieved successfully");
-            response.put("bookings", allBookings);
-            response.put("count", allBookings.size());
-            
+            response.put("bookings", simple);
+            response.put("count", simple.size());
+
             return ResponseEntity.ok(response);
-            
+
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
             error.put("message", "Failed to fetch all bookings: " + e.getMessage());
