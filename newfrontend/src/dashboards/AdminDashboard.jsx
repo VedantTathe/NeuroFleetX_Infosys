@@ -487,6 +487,11 @@ const AdminDashboard = () => {
           </div>
         </div>
 
+        {/* Heatmap */}
+        <div className="mb-8">
+          <Heatmap />
+        </div>
+
         {/* Quick Actions */}
         <div className="bg-white rounded-lg shadow p-6 mb-8">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
