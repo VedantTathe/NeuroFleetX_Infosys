@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { dashboardService } from '../services/services';
 import { 
   FaRoute, FaDollarSign, FaMapMarkerAlt, FaStar, FaCheckCircle,
@@ -10,6 +10,9 @@ const DriverDashboard = () => {
   const [metrics, setMetrics] = useState(null);
   const [currentTrip, setCurrentTrip] = useState(null);
   const [tripHistory, setTripHistory] = useState([]);
+  const [isOnline, setIsOnline] = useState(true);
+  const [recentlyCompleted, setRecentlyCompleted] = useState(false);
+  const recentlyCompletedRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -22,10 +25,59 @@ const DriverDashboard = () => {
   const fetchMetrics = async () => {
     try {
       const data = await dashboardService.getDriverMetrics();
-      setMetrics(data);
+      // Map backend keys to frontend keys (backend uses `todaysTrips` / `todaysEarnings`)
+      if (data) {
+        const mapped = {
+          todayTrips: data.todayTrips ?? data.todaysTrips,
+          todayEarnings: data.todayEarnings ?? data.todaysEarnings,
+          distanceCovered: data.distanceCovered ?? data.distanceCovered,
+          driverRating: data.driverRating ?? data.driverRating,
+          completedTrips: data.completedTrips ?? data.completedTrips,
+          acceptanceRate: data.acceptanceRate ?? data.acceptanceRate,
+          onlineHours: data.onlineHours,
+          fuelConsumed: data.fuelConsumed
+        };
+        setMetrics(mapped);
+      } else {
+        setMetrics(null);
+      }
     } catch (err) {
       console.error('Failed to fetch metrics:', err);
     }
+  };
+
+  const toggleOnline = () => {
+    setIsOnline((prev) => !prev);
+  };
+
+  const completeTrip = (trip) => {
+    if (!trip) return;
+    // Mark trip as completed and clear current trip
+    const completed = {
+      ...trip,
+      status: 'completed',
+      date: new Date().toISOString().split('T')[0],
+      // ensure `rating` field exists for TripHistoryItem
+      rating: trip.rating ?? trip.customerRating ?? 0
+    };
+    setTripHistory((prev) => [completed, ...prev]);
+    setCurrentTrip(null);
+    // Update metrics counters if using real metrics
+    setMetrics((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        completedTrips: (prev.completedTrips ?? 0) + 1,
+        todayTrips: (prev.todayTrips ?? 0) + 1
+      };
+    });
+    // briefly suppress the placeholder 'Go Online' button after completing a trip
+    setRecentlyCompleted(true);
+    if (recentlyCompletedRef.current) clearTimeout(recentlyCompletedRef.current);
+    recentlyCompletedRef.current = setTimeout(() => {
+      setRecentlyCompleted(false);
+      recentlyCompletedRef.current = null;
+    }, 5000);
   };
 
   const fetchCurrentTrip = async () => {
@@ -151,12 +203,14 @@ const DriverDashboard = () => {
     );
   };
 
-  const StarRating = ({ rating, size = 'sm' }) => {
+  const StarRating = ({ rating = 0, size = 'sm' }) => {
     const sizeClasses = {
       sm: 'w-4 h-4',
       md: 'w-5 h-5',
       lg: 'w-6 h-6'
     };
+
+    const safeRating = Number.isFinite(Number(rating)) ? Number(rating) : 0;
 
     return (
       <div className="flex items-center space-x-1">
@@ -164,16 +218,16 @@ const DriverDashboard = () => {
           <FaStar
             key={star}
             className={`${sizeClasses[size]} ${
-              star <= rating ? 'text-yellow-400' : 'text-gray-300'
+              star <= safeRating ? 'text-yellow-400' : 'text-gray-300'
             }`}
           />
         ))}
-        <span className="ml-2 text-sm text-gray-600">{rating.toFixed(1)}</span>
+        <span className="ml-2 text-sm text-gray-600">{safeRating.toFixed(1)}</span>
       </div>
     );
   };
 
-  const CurrentTripCard = ({ trip }) => {
+  const CurrentTripCard = ({ trip, onComplete }) => {
     const getStatusColor = (status) => {
       switch (status) {
         case 'active': return 'bg-green-100 text-green-800';
@@ -261,7 +315,10 @@ const DriverDashboard = () => {
 
           {/* Action Buttons */}
           <div className="flex space-x-3">
-            <button className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+            <button
+              onClick={() => onComplete && onComplete(trip)}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            >
               <FaCheckCircle className="inline mr-2" />
               Complete Trip
             </button>
@@ -337,14 +394,29 @@ const DriverDashboard = () => {
               <p className="text-gray-600">Manage your trips and earnings</p>
             </div>
             <div className="flex items-center space-x-2">
-              <button className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
-                <FaPlay className="inline mr-2" />
-                Go Online
+              <button
+                onClick={toggleOnline}
+                className={`px-4 py-2 rounded-md transition-colors ${isOnline ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}
+              >
+                {isOnline ? <FaStop className="inline mr-2" /> : <FaPlay className="inline mr-2" />}
+                {isOnline ? 'Go Offline' : 'Go Online'}
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Live banner when online */}
+      {isOnline && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+          <div className="rounded-md bg-green-50 p-4 border-l-4 border-green-400">
+            <div className="flex items-start">
+              <span className="animate-pulse inline-block w-2 h-2 bg-green-600 rounded-full mr-3 mt-1" />
+              <p className="text-sm text-green-700">You are now live for search trips — searching for requests...</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Metrics Grid */}
@@ -383,16 +455,23 @@ const DriverDashboard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Current Trip */}
           <div className="lg:col-span-2">
-            {currentTrip ? (
-              <CurrentTripCard trip={currentTrip} />
+            {isOnline && currentTrip ? (
+              <CurrentTripCard trip={currentTrip} onComplete={completeTrip} />
             ) : (
               <div className="bg-white rounded-lg shadow-md p-8 text-center">
                 <FaCar className="mx-auto h-16 w-16 text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Trip</h3>
-                <p className="text-gray-600 mb-4">You're currently offline or waiting for the next trip</p>
-                <button className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                  Go Online
-                </button>
+                <p className="text-gray-600 mb-4">
+                  {isOnline ? "You're currently waiting for the next trip" : "You're currently offline. Go online to receive trips."}
+                </p>
+                {!recentlyCompleted && (
+                  <button
+                    onClick={() => setIsOnline(true)}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Go Online
+                  </button>
+                )}
               </div>
             )}
           </div>

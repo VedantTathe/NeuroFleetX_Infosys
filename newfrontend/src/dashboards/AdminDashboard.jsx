@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { dashboardService, vehicleService, bookingService } from '../services/services';
+import { dashboardService, vehicleService, bookingService, userService } from '../services/services';
 import Heatmap from '../components/Heatmap';
 import { 
   FaUsers, FaCar, FaRoute, FaTools, FaChartLine, FaExclamationTriangle,
@@ -12,6 +12,10 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalData, setModalData] = useState([]);
 
   useEffect(() => {
     fetchMetrics();
@@ -29,24 +33,121 @@ const AdminDashboard = () => {
   };
 
   const handleQuickAction = (action) => {
-    switch (action) {
-      case 'users':
-        navigate('/admin/users');
-        break;
-      case 'vehicles':
-        navigate('/admin/vehicles');
-        break;
-      case 'bookings':
-        navigate('/admin/booking');
-        break;
-      case 'maintenance':
-        navigate('/admin/maintenance');
-        break;
-      case 'reports':
-        navigate('/admin/reports');
-        break;
-      default:
-        break;
+    // Open modal and fetch relevant data so manager can act immediately
+    setModalType(action);
+    setModalVisible(true);
+    if (action === 'users') fetchModalUsers();
+    if (action === 'vehicles') fetchModalVehicles();
+    if (action === 'bookings') fetchModalBookings();
+    if (action === 'maintenance') fetchModalMaintenance();
+    if (action === 'reports') fetchModalReports();
+  };
+
+  // --- Modal data fetchers ---
+  const fetchModalUsers = async () => {
+    setModalLoading(true);
+    try {
+      const data = await userService.getAllUsers();
+      const users = Array.isArray(data) ? data : (data.users || data);
+      setModalData(users);
+    } catch (err) {
+      console.error('Failed to fetch users for modal:', err);
+      setModalData([]);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const fetchModalVehicles = async () => {
+    setModalLoading(true);
+    try {
+      const data = await vehicleService.getAllVehicles();
+      const vehicles = Array.isArray(data) ? data : (data.vehicles || data);
+      setModalData(vehicles);
+    } catch (err) {
+      console.error('Failed to fetch vehicles for modal:', err);
+      setModalData([]);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const fetchModalBookings = async () => {
+    setModalLoading(true);
+    try {
+      const data = await bookingService.getAllBookings();
+      const bookings = Array.isArray(data) ? data : (data.bookings || data);
+      setModalData(bookings);
+    } catch (err) {
+      console.error('Failed to fetch bookings for modal:', err);
+      setModalData([]);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const fetchModalMaintenance = async () => {
+    // Frontend-only dummy maintenance data (no backend connection)
+    setModalLoading(true);
+    try {
+      const sample = [
+        { id: 1, vehicle: 'NY-123', issue: 'Oil change required', severity: 'Medium', createdAt: '2026-01-20', resolved: false },
+        { id: 2, vehicle: 'CA-987', issue: 'Brake pads low', severity: 'High', createdAt: '2026-01-25', resolved: false },
+        { id: 3, vehicle: 'TX-555', issue: 'Tire pressure low', severity: 'Low', createdAt: '2026-01-27', resolved: true }
+      ];
+      setModalData(sample);
+    } catch (e) {
+      setModalData([]);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const fetchModalReports = async () => {
+    // Frontend-only dummy reports list (no backend connection)
+    setModalLoading(true);
+    try {
+      const sample = [
+        { id: 'rpt-001', name: 'Monthly Revenue (Sample)', generatedAt: '2026-01-01' },
+        { id: 'rpt-002', name: 'Weekly Bookings (Sample)', generatedAt: '2026-01-22' }
+      ];
+      setModalData(sample);
+    } catch (e) {
+      setModalData([]);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setModalType(null);
+    setModalData([]);
+  };
+
+  // --- Modal actions ---
+  const handleDeleteVehicle = async (id) => {
+    if (!confirm('Delete vehicle? This cannot be undone.')) return;
+    try {
+      await vehicleService.deleteVehicle(id);
+      // refresh list
+      fetchModalVehicles();
+      fetchMetrics();
+    } catch (err) {
+      console.error('Failed to delete vehicle:', err);
+      alert('Failed to delete vehicle');
+    }
+  };
+
+  const handleCancelBooking = async (id) => {
+    if (!confirm('Cancel booking?')) return;
+    try {
+      await bookingService.cancelBooking(id);
+      fetchModalBookings();
+      fetchMetrics();
+    } catch (err) {
+      console.error('Failed to cancel booking:', err);
+      alert('Failed to cancel booking');
     }
   };
 
@@ -171,10 +272,139 @@ const AdminDashboard = () => {
                 </div>
             </div>
           </div>
+          </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Modal for quick actions */}
+          {modalVisible && (
+            <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-4">
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mt-20">
+                <div className="flex items-center justify-between p-4 border-b">
+                  <h3 className="font-bold">{modalType ? modalType.charAt(0).toUpperCase() + modalType.slice(1) : ''}</h3>
+                  <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">Close</button>
+                </div>
+                <div className="p-4 max-h-[60vh] overflow-auto">
+                  {modalLoading ? (
+                    <div className="text-center p-8">Loading...</div>
+                  ) : (
+                    <div>
+                      {modalType === 'users' && (
+                        <table className="w-full text-left">
+                          <thead className="text-xs text-gray-500 uppercase">
+                            <tr><th className="p-2">ID</th><th className="p-2">Name</th><th className="p-2">Email</th></tr>
+                          </thead>
+                          <tbody>
+                            {modalData.map(u => (
+                              <tr key={u.id} className="border-t"><td className="p-2 font-mono text-sm">{u.id}</td><td className="p-2">{u.name || u.fullName || u.username}</td><td className="p-2">{u.email}</td></tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+
+                      {modalType === 'vehicles' && (
+                        <table className="w-full text-left">
+                          <thead className="text-xs text-gray-500 uppercase">
+                            <tr><th className="p-2">ID</th><th className="p-2">Name</th><th className="p-2">Plate</th><th className="p-2">Actions</th></tr>
+                          </thead>
+                          <tbody>
+                            {modalData.map(v => (
+                              <tr key={v.id} className="border-t">
+                                <td className="p-2 font-mono text-sm">{v.id}</td>
+                                <td className="p-2">{v.make ? `${v.make} ${v.model}` : v.name}</td>
+                                <td className="p-2">{v.licensePlate || v.plate}</td>
+                                <td className="p-2">
+                                  <button onClick={() => handleDeleteVehicle(v.id)} className="text-red-500 hover:text-red-700">Delete</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+
+                      {modalType === 'bookings' && (
+                        <table className="w-full text-left">
+                          <thead className="text-xs text-gray-500 uppercase">
+                            <tr><th className="p-2">ID</th><th className="p-2">Customer</th><th className="p-2">Fare</th><th className="p-2">Status</th><th className="p-2">Actions</th></tr>
+                          </thead>
+                          <tbody>
+                            {modalData.map(b => (
+                              <tr key={b.id} className="border-t">
+                                <td className="p-2 font-mono text-sm">{b.id}</td>
+                                <td className="p-2">{b.customer?.name || b.customerName || b.customer}</td>
+                                <td className="p-2">${b.estimatedCost ?? b.fare ?? b.estimated_cost ?? ''}</td>
+                                <td className="p-2">{b.status}</td>
+                                <td className="p-2">{b.status !== 'cancelled' && <button onClick={() => handleCancelBooking(b.id)} className="text-yellow-600">Cancel</button>}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+
+                      {modalType === 'maintenance' && (
+                        <div>
+                          <table className="w-full text-left">
+                            <thead className="text-xs text-gray-500 uppercase">
+                              <tr><th className="p-2">ID</th><th className="p-2">Vehicle</th><th className="p-2">Issue</th><th className="p-2">Severity</th><th className="p-2">Status</th><th className="p-2">Action</th></tr>
+                            </thead>
+                            <tbody>
+                              {modalData.map(item => (
+                                <tr key={item.id} className="border-t">
+                                  <td className="p-2 font-mono text-sm">{item.id}</td>
+                                  <td className="p-2">{item.vehicle}</td>
+                                  <td className="p-2">{item.issue}</td>
+                                  <td className="p-2">{item.severity}</td>
+                                  <td className="p-2">{item.resolved ? 'Resolved' : 'Open'}</td>
+                                  <td className="p-2">
+                                    {!item.resolved && (
+                                      <button onClick={() => {
+                                        // client-side only: mark resolved locally
+                                        setModalData(prev => prev.map(p => p.id === item.id ? { ...p, resolved: true } : p));
+                                      }} className="text-green-600">Mark Resolved</button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {modalType === 'reports' && (
+                        <div>
+                          <p className="text-sm text-gray-600 mb-3">This is a frontend-only sample. Download a sample CSV below.</p>
+                          <div className="space-y-2">
+                            {modalData.map(r => (
+                              <div key={r.id} className="flex items-center justify-between p-2 border rounded">
+                                <div>
+                                  <div className="font-medium">{r.name}</div>
+                                  <div className="text-xs text-gray-500">Generated: {r.generatedAt}</div>
+                                </div>
+                                <div>
+                                  <button onClick={() => {
+                                    // download a small CSV sample for this report
+                                    const csv = 'col1,col2\nvalue1,value2';
+                                    const blob = new Blob([csv], { type: 'text/csv' });
+                                    const link = document.createElement('a');
+                                    link.href = URL.createObjectURL(blob);
+                                    link.download = `${r.id}.csv`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    link.remove();
+                                  }} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Download Sample</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Metrics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
@@ -226,6 +456,8 @@ const AdminDashboard = () => {
           </div>
         </div>
 
+        
+
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
@@ -253,11 +485,6 @@ const AdminDashboard = () => {
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
-
-        {/* Heatmap */}
-        <div className="mb-8">
-          <Heatmap />
         </div>
 
         {/* Quick Actions */}
@@ -304,6 +531,11 @@ const AdminDashboard = () => {
               Reports
             </button>
           </div>
+        </div>
+
+        {/* Heatmap */}
+        <div className="mb-8">
+          <Heatmap />
         </div>
 
         {/* Recent Activity */}

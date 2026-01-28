@@ -191,10 +191,10 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-const UserMap = ({ location }) => {
+const UserMap = ({ location, vehicles = [] }) => {
   const mapContainerRef = useRef(null); // The div
   const mapInstanceRef = useRef(null);  // The map
-  const markerRef = useRef(null);       // The vehicle marker
+  const markersLayerRef = useRef(null); // Layer group for vehicle markers
 
   // 1. Initialize Map (Runs once)
   useEffect(() => {
@@ -211,6 +211,8 @@ const UserMap = ({ location }) => {
     }).addTo(map);
 
     mapInstanceRef.current = map;
+    // create a layer group for vehicle markers
+    markersLayerRef.current = L.layerGroup().addTo(map);
 
     // Cleanup
     return () => {
@@ -219,27 +221,35 @@ const UserMap = ({ location }) => {
     };
   }, []);
 
-  // 2. Update Location Marker
+  // 2. Update vehicle markers when `vehicles` changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const layer = markersLayerRef.current;
+    if (!map || !layer) return;
+
+    // Clear existing markers
+    layer.clearLayers();
+
+    // Add marker for every vehicle
+    vehicles.forEach(v => {
+      if (!v || !v.location) return;
+      const lat = v.location.lat;
+      const lng = v.location.lng;
+      if (lat == null || lng == null) return;
+
+      const marker = L.marker([lat, lng]);
+      marker.bindPopup(`<b>${v.name}</b><br/>${v.plate || ''}<br/>Status: ${v.status}`);
+      marker.addTo(layer);
+    });
+
+  }, [vehicles]);
+
+  // 3. Pan/fly to `location` when it changes (single selected location)
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !location || !location.lat) return;
-
     const newLatLng = [location.lat, location.lng];
-
-    // If marker doesn't exist, create it
-    if (!markerRef.current) {
-      markerRef.current = L.marker(newLatLng)
-        .addTo(map)
-        .bindPopup("Vehicle Location")
-        .openPopup();
-    } else {
-      // If marker exists, just move it (smooth update)
-      markerRef.current.setLatLng(newLatLng);
-    }
-
-    // Pan map to new location
-    map.flyTo(newLatLng, 13, { duration: 1.5 });
-
+    map.flyTo(newLatLng, 13, { duration: 1.0 });
   }, [location]);
 
   return (

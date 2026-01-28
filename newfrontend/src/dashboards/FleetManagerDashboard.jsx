@@ -280,7 +280,7 @@ const FleetManagerDashboard = () => {
                     <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded animate-pulse">● Live Updates</span>
                 </div>
                 <div className="flex-1 relative bg-gray-100">
-                    <UserMap location={currentMapLocation} />
+                    <UserMap location={currentMapLocation} vehicles={vehicles} />
                 </div>
                 {/* Selected Vehicle Detail Card */}
                 <div className="p-4 bg-white border-t border-gray-200">
