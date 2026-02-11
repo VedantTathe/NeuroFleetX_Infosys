@@ -31,10 +31,24 @@ const Heatmap = ({ pollInterval = 5000 }) => {
   useEffect(() => {
     if (mapRef.current) return;
 
+    // Create a fresh inner container for the map to avoid reusing the
+    // same DOM node across HMR/StrictMode remounts (prevents Leaflet errors).
+    const outer = document.getElementById('admin-heatmap');
+    if (!outer) return;
+    const inner = document.createElement('div');
+    const innerId = `admin-heatmap-inner-${Date.now()}`;
+    inner.id = innerId;
+    inner.style.width = '100%';
+    inner.style.height = '100%';
+    // Clear any previous children then append our inner container
+    while (outer.firstChild) outer.removeChild(outer.firstChild);
+    outer.appendChild(inner);
+
     const initialCenter = [20.5937, 78.9629];
     const initialZoom = 5;
 
-    const map = L.map('admin-heatmap').setView(initialCenter, initialZoom);
+    // Initialize the map on the fresh inner container element
+    const map = L.map(innerId).setView(initialCenter, initialZoom);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
@@ -61,7 +75,9 @@ const Heatmap = ({ pollInterval = 5000 }) => {
     controlsRef.current = new Controls({ position: 'topright' }).addTo(map);
 
     return () => {
-      map.remove();
+      try { map.remove(); } catch (e) { /* ignore */ }
+      // remove inner container if still present
+      if (outer && outer.contains(inner)) outer.removeChild(inner);
       mapRef.current = null;
     };
   }, []);
@@ -268,10 +284,11 @@ const Heatmap = ({ pollInterval = 5000 }) => {
   }, [pollInterval, showHeat, showClusters, showVehicles]);
 
   return (
-    <div className="bg-white rounded-lg shadow p-4" style={{ height: 520 }}>
-      <h3 className="text-lg font-medium text-gray-900 mb-2">Fleet Heatmap (real-time)</h3>
-      <div id="admin-heatmap" style={{ height: '460px', width: '100%' }} />
-    </div>
+    <div></div>
+    // <div className="bg-white rounded-lg shadow p-4" style={{ height: 520 }}>
+    //   <h3 className="text-lg font-medium text-gray-900 mb-2">Fleet Heatmap (real-time)</h3>
+    //   <div id="admin-heatmap" style={{ height: '460px', width: '100%' }} />
+    // </div>
   );
 };
 
